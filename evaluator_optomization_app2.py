@@ -76,13 +76,17 @@ jobs_df['Cleaned Customer'] = jobs_df['Customer Company'].apply(clean_customer_n
 mileage_df['Cleaned Customer'] = mileage_df['Customer'].apply(clean_customer_name)
 
 # Fuzzy match customer names
-def fuzzy_match_customer(job_name, choices, threshold=75):
+def fuzzy_match_customer(job_name, choices, threshold=85):
     match, score, _ = process.extractOne(job_name, choices)
     return match if score >= threshold else None
 
 jobs_df['Matched Customer'] = jobs_df['Cleaned Customer'].apply(
     lambda x: fuzzy_match_customer(x, mileage_df['Cleaned Customer'].unique())
 )
+
+# ✅ Log matched vs unmatched customers
+st.subheader("📋 Matched Customers")
+st.dataframe(jobs_df[['Job number', 'Customer Company', 'Matched Customer']])
 
 # Infer number of evaluators needed
 jobs_df['Evaluators Needed'] = jobs_df['Assignee(s)'].apply(
@@ -94,15 +98,28 @@ job_slots = []
 for _, row in jobs_df.iterrows():
     job_slots += [(row['Job number'], row['Matched Customer'])] * row['Evaluators Needed']
 
+# ✅ Log job slot count
+st.write(f"🧮 Total job slots created: {len(job_slots)}")
+
 # Build cost matrix with Springborn exclusion
 cost_matrix = {}
 for evaluator in mileage_df['Evaluator'].unique():
     for job_num, customer in job_slots:
         if evaluator == "Springborn" and customer == "national fuel":
-            continue  # Exclude Springborn from National Fuel
+            continue
         match = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Cleaned Customer'] == customer)]
         if not match.empty:
             cost_matrix[(evaluator, job_num)] = match['Total Cost'].values[0]
+
+# ✅ Log cost matrix coverage
+job_coverage = pd.DataFrame(job_slots, columns=['Job number', 'Customer'])
+job_coverage['Has Cost Entry'] = job_coverage.apply(
+    lambda row: any((e, row['Job number']) in cost_matrix for e in mileage_df['Evaluator'].unique()),
+    axis=1
+)
+missing_costs = job_coverage[~job_coverage['Has Cost Entry']]
+if not missing_costs.empty:
+    st.warning(f"⚠️ Jobs with no cost data: {missing_costs['Job number'].unique().tolist()}")
 
 # Define optimization problem
 prob = LpProblem("EvaluatorAssignment", LpMinimize)
@@ -153,5 +170,4 @@ st.download_button(
     data=csv,
     file_name="optimized_evaluator_assignments.csv",
     mime="text/csv"
-
 )
