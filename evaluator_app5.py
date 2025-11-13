@@ -1,18 +1,16 @@
 import streamlit as st
 import pandas as pd
 import os
+from rapidfuzz import process
 
 st.set_page_config(page_title="Evaluator Assignment Tool", layout="wide")
 st.title("Evaluator Assignment by Closest Distance")
 
 # File checks
-missing_files = []
-for file in ["Jobs_1526.xlsx", "Evaluator_Customer_Mileage.csv", "Evaluators_FullTime.csv"]:
-    if not os.path.exists(file):
-        missing_files.append(file)
-
-if missing_files:
-    st.error(f"Missing required file(s): {', '.join(missing_files)}. Please upload them to proceed.")
+required_files = ["Jobs_1526.xlsx", "Evaluator_Customer_Mileage.csv", "Evaluators_FullTime.csv"]
+missing = [f for f in required_files if not os.path.exists(f)]
+if missing:
+    st.error(f"Missing required file(s): {', '.join(missing)}. Please upload them to proceed.")
     st.stop()
 
 # Load mileage data
@@ -61,15 +59,25 @@ mileage_df['Total Cost'] = (
 
 # Load job data
 jobs_df = pd.read_excel("Jobs_1526.xlsx")
-jobs_df['Customer Company'] = jobs_df['Customer Company'].astype(str).str.strip()
+jobs_df['Customer Company'] = jobs_df['Customer Company'].astype(str).str.strip().str.lower()
+mileage_df['Customer'] = mileage_df['Customer'].astype(str).str.strip().str.lower()
+
+# Fuzzy match customer names
+def fuzzy_match_customer(job_name, choices, threshold=85):
+    match, score, _ = process.extractOne(job_name, choices)
+    return match if score >= threshold else None
+
+jobs_df['Matched Customer'] = jobs_df['Customer Company'].apply(
+    lambda x: fuzzy_match_customer(x, mileage_df['Customer'].unique())
+)
 
 # Infer number of evaluators needed
 jobs_df['Evaluators Needed'] = jobs_df['Assignee(s)'].apply(
     lambda x: len(str(x).split(',')) if pd.notnull(x) else 1
 )
 
-# Match jobs to mileage data
-merged_df = jobs_df.merge(mileage_df, left_on="Customer Company", right_on="Customer", how="left")
+# Merge using fuzzy-matched customer
+merged_df = jobs_df.merge(mileage_df, left_on="Matched Customer", right_on="Customer", how="left")
 
 # Select closest evaluators per job
 def select_closest(group):
