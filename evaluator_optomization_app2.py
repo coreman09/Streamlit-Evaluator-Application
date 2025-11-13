@@ -60,7 +60,7 @@ mileage_df['Total Cost'] = mileage_df['cost ($)'].fillna(0) + mileage_df['Per Di
 # Load job file
 jobs_df = pd.read_excel(uploaded_job_file)
 
-# Enhanced customer name cleaning
+# Case-insensitive cleaning
 def clean_customer_name(name):
     name = re.sub(r'^\d+\s*[-–]?\s*', '', str(name))  # remove numeric prefix
     name = re.sub(r'\(.*?\)', '', name)               # remove parentheticals
