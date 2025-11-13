@@ -1,13 +1,18 @@
 import streamlit as st
 import pandas as pd
 
-# Load and clean data
+# Load and clean main data
 df = pd.read_csv("Evaluator_Customer_Mileage.csv")
-df.columns = df.columns.str.strip()  # Remove leading/trailing spaces
+df.columns = df.columns.str.strip()
 
-# Rename cost column to consistent casing
-if "Cost ($)" in df.columns:
-    df.rename(columns={"Cost ($)": "cost ($)"}, inplace=True)
+# Load full-time evaluator list
+full_time_df = pd.read_csv("Evaluators_FullTime.csv")
+full_time_names = full_time_df['Last Name'].str.strip().unique()
+
+# Tag evaluator status
+df['Status'] = df['Evaluator'].apply(
+    lambda name: 'Full-Time' if name.strip() in full_time_names else 'Contract'
+)
 
 # Drop one-way miles if present
 if "One-Way Miles" in df.columns:
@@ -39,22 +44,23 @@ filtered_df['Round-Trip Miles'] = pd.to_numeric(filtered_df.get('Round-Trip Mile
 filtered_df['cost ($)'] = pd.to_numeric(filtered_df.get('cost ($)'), errors='coerce')
 
 # Add Per Diem
-filtered_df['Per Diem'] = filtered_df['Round-Trip Miles'].apply(
-    lambda x: 225 if pd.notnull(x) and x > 175 else 0
+filtered_df['Per Diem'] = filtered_df.apply(
+    lambda row: 225 if row['Round-Trip Miles'] > 175 and row['Status'] != 'Full-Time' else 0,
+    axis=1
 )
 
 # Add Mileage Bonus
-def mileage_bonus(miles):
-    if pd.isnull(miles):
+def mileage_bonus(row):
+    if row['Status'] == 'Full-Time' or pd.isnull(row['Round-Trip Miles']):
         return 0
-    elif miles > 800:
+    elif row['Round-Trip Miles'] > 800:
         return 500
-    elif miles > 400:
+    elif row['Round-Trip Miles'] > 400:
         return 250
     else:
         return 0
 
-filtered_df['Mileage Bonus'] = filtered_df['Round-Trip Miles'].apply(mileage_bonus)
+filtered_df['Mileage Bonus'] = filtered_df.apply(mileage_bonus, axis=1)
 
 # Add Total Cost
 filtered_df['Total Cost'] = (
