@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import re
 from rapidfuzz import process
-from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpBinary
+from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpBinary, LpStatus
 
 st.set_page_config(page_title="Evaluator Optimizer", layout="wide")
 st.title("Optimized Evaluator Assignment")
@@ -122,6 +122,7 @@ for evaluator in mileage_df['Evaluator'].unique():
 
 # Solve
 prob.solve()
+st.write(f"🧠 Solver status: {LpStatus[prob.status]}")
 
 # Build output
 assignments = []
