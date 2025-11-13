@@ -3,35 +3,43 @@ import pandas as pd
 
 # Load and clean data
 df = pd.read_csv("Evaluator_Customer_Mileage.csv")
-df.columns = df.columns.str.strip().str.lower()  # Normalize column names
+df.columns = df.columns.str.strip()  # Remove leading/trailing spaces
+
+# Rename cost column to consistent casing
+if "Cost ($)" in df.columns:
+    df.rename(columns={"Cost ($)": "cost ($)"}, inplace=True)
+
+# Drop one-way miles if present
+if "One-Way Miles" in df.columns:
+    df.drop(columns=["One-Way Miles"], inplace=True)
 
 # Sidebar filters
 st.sidebar.header("Filter Options")
 selected_customers = st.sidebar.multiselect(
     "Select Customers",
-    options=sorted(df['customer'].unique()),
+    options=sorted(df['Customer'].unique()),
     default=[]
 )
 
 selected_evaluators = st.sidebar.multiselect(
     "Select Evaluators",
-    options=sorted(df['evaluator'].unique()),
+    options=sorted(df['Evaluator'].unique()),
     default=[]
 )
 
 # Apply filters
 filtered_df = df.copy()
 if selected_customers:
-    filtered_df = filtered_df[filtered_df['customer'].isin(selected_customers)]
+    filtered_df = filtered_df[filtered_df['Customer'].isin(selected_customers)]
 if selected_evaluators:
-    filtered_df = filtered_df[filtered_df['evaluator'].isin(selected_evaluators)]
+    filtered_df = filtered_df[filtered_df['Evaluator'].isin(selected_evaluators)]
 
 # Ensure numeric columns
-filtered_df['round-trip miles'] = pd.to_numeric(filtered_df.get('round-trip miles'), errors='coerce')
+filtered_df['Round-Trip Miles'] = pd.to_numeric(filtered_df.get('Round-Trip Miles'), errors='coerce')
 filtered_df['cost ($)'] = pd.to_numeric(filtered_df.get('cost ($)'), errors='coerce')
 
 # Add Per Diem
-filtered_df['per diem'] = filtered_df['round-trip miles'].apply(
+filtered_df['Per Diem'] = filtered_df['Round-Trip Miles'].apply(
     lambda x: 225 if pd.notnull(x) and x > 175 else 0
 )
 
@@ -46,30 +54,27 @@ def mileage_bonus(miles):
     else:
         return 0
 
-filtered_df['mileage bonus'] = filtered_df['round-trip miles'].apply(mileage_bonus)
+filtered_df['Mileage Bonus'] = filtered_df['Round-Trip Miles'].apply(mileage_bonus)
 
 # Add Total Cost
-filtered_df['total cost'] = (
+filtered_df['Total Cost'] = (
     filtered_df['cost ($)'].fillna(0) +
-    filtered_df['per diem'] +
-    filtered_df['mileage bonus']
+    filtered_df['Per Diem'] +
+    filtered_df['Mileage Bonus']
 )
-
-# Drop original cost column if not needed
-filtered_df.drop(columns=['cost ($)'], inplace=True)
 
 # Highlight closest evaluator per customer
 def highlight_grouped_rows(df_grouped):
     highlight = pd.DataFrame('', index=df_grouped.index, columns=df_grouped.columns)
-    for customer, group in df_grouped.groupby('customer'):
-        if not group.empty and 'round-trip miles' in group.columns:
-            min_index = group['round-trip miles'].idxmin()
+    for customer, group in df_grouped.groupby('Customer'):
+        if not group.empty and 'Round-Trip Miles' in group.columns:
+            min_index = group['Round-Trip Miles'].idxmin()
             highlight.loc[min_index] = ['background-color: lightgreen'] * len(group.columns)
     return highlight
 
 # Format numeric columns
 format_dict = {col: '{:.2f}' for col in filtered_df.select_dtypes(include='number').columns}
-for col in ['per diem', 'mileage bonus', 'total cost']:
+for col in ['cost ($)', 'Per Diem', 'Mileage Bonus', 'Total Cost']:
     if col in format_dict:
         format_dict[col] = '${:,.2f}'
 
@@ -82,7 +87,7 @@ styled_df = filtered_df.style\
 st.subheader("Closest Evaluator per Customer")
 st.dataframe(styled_df)
 
-# Download button
+# Download button (no index column)
 csv = filtered_df.to_csv(index=False).encode('utf-8')
 st.download_button(
     label="Download Filtered Data as CSV",
