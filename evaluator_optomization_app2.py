@@ -62,9 +62,9 @@ jobs_df = pd.read_excel(uploaded_job_file)
 
 # Case-insensitive cleaning
 def clean_customer_name(name):
-    name = re.sub(r'^\d+\s*[-–]?\s*', '', str(name))  # remove numeric prefix
-    name = re.sub(r'\(.*?\)', '', name)               # remove parentheticals
-    name = re.sub(r'[^a-zA-Z0-9\s]', '', name)        # remove punctuation
+    name = re.sub(r'^\d+\s*[-–]?\s*', '', str(name))
+    name = re.sub(r'\(.*?\)', '', name)
+    name = re.sub(r'[^a-zA-Z0-9\s]', '', name)
     return name.lower().strip()
 
 jobs_df['Cleaned Customer'] = jobs_df['Customer Company'].apply(clean_customer_name)
@@ -106,7 +106,7 @@ jobs_df['Evaluators Needed'] = jobs_df['Assignee(s)'].apply(
 job_slots = []
 for _, row in jobs_df.iterrows():
     if pd.notnull(row['Matched Customer']):
-        job_slots += [(row['Job number'], row['Matched Customer'])] * row['Evaluators Needed']
+        job_slots += [(row['Job number'], row['Matched Customer'].lower().strip())] * row['Evaluators Needed']
 
 # Log job slot count
 expected_slots = jobs_df['Evaluators Needed'].sum()
@@ -115,14 +115,22 @@ st.write(f"🧮 Expected job slots: {expected_slots}, Actual job slots: {actual_
 
 # Build cost matrix
 cost_matrix = {}
+unmatched_pairs = []
 for evaluator in mileage_df['Evaluator'].unique():
     for job_num, customer in job_slots:
-        if evaluator == "Springborn" and customer == "national fuel":
-            continue
-        match = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Cleaned Customer'] == customer)]
+        customer = customer.lower().strip()
+        match = mileage_df[
+            (mileage_df['Evaluator'] == evaluator) &
+            (mileage_df['Cleaned Customer'].str.lower().str.strip() == customer)
+        ]
         if not match.empty:
             best_row = match.sort_values(by='Total Cost', ascending=False).iloc[0]
             cost_matrix[(evaluator, job_num)] = best_row['Total Cost']
+        else:
+            unmatched_pairs.append((evaluator, job_num, customer))
+
+if unmatched_pairs:
+    st.warning(f"⚠️ Unmatched evaluator–customer pairs (sample): {unmatched_pairs[:10]}")
 
 # Log missing jobs
 covered_jobs = set([job_num for (_, job_num) in cost_matrix.keys()])
@@ -154,7 +162,10 @@ assignments = []
 for (evaluator, job_num), var in x.items():
     if var.value() == 1:
         job_row = jobs_df[jobs_df['Job number'] == job_num].iloc[0]
-        cost_row = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Cleaned Customer'] == job_row['Matched Customer'])].sort_values(by='Total Cost', ascending=False).iloc[0]
+        cost_row = mileage_df[
+            (mileage_df['Evaluator'] == evaluator) &
+            (mileage_df['Cleaned Customer'].str.lower().str.strip() == job_row['Matched Customer'].lower().strip())
+        ].sort_values(by='Total Cost', ascending=False).iloc[0]
         assignments.append({
             'Job number': job_num,
             'Customer Company': job_row['Customer Company'],
