@@ -39,13 +39,11 @@ mileage_df['Status'] = mileage_df['Evaluator'].apply(
 mileage_df['Round-Trip Miles'] = pd.to_numeric(mileage_df['Round-Trip Miles'], errors='coerce')
 mileage_df['cost ($)'] = pd.to_numeric(mileage_df['cost ($)'], errors='coerce')
 
-# Add Per Diem (contractors only)
+# Add Per Diem and Mileage Bonus
 mileage_df['Per Diem'] = mileage_df.apply(
     lambda row: 225 if row['Round-Trip Miles'] > 175 and row['Status'] == 'Contract' else 0,
     axis=1
 )
-
-# Add Mileage Bonus (contractors only)
 def mileage_bonus(row):
     if row['Status'] != 'Contract' or pd.isnull(row['Round-Trip Miles']):
         return 0
@@ -55,40 +53,31 @@ def mileage_bonus(row):
         return 250
     else:
         return 0
-
 mileage_df['Mileage Bonus'] = mileage_df.apply(mileage_bonus, axis=1)
+mileage_df['Total Cost'] = mileage_df['cost ($)'].fillna(0) + mileage_df['Per Diem'] + mileage_df['Mileage Bonus']
 
-# Add Total Cost
-mileage_df['Total Cost'] = (
-    mileage_df['cost ($)'].fillna(0) +
-    mileage_df['Per Diem'] +
-    mileage_df['Mileage Bonus']
-)
-
-# Load uploaded job file
+# Load job file
 jobs_df = pd.read_excel(uploaded_job_file)
 
-# Clean customer names by stripping numeric prefixes
+# Clean customer names
 def clean_customer_name(name):
     return re.sub(r'^\d+\s*[-–]?\s*', '', str(name)).lower().strip()
-
 jobs_df['Cleaned Customer'] = jobs_df['Customer Company'].apply(clean_customer_name)
 mileage_df['Cleaned Customer'] = mileage_df['Customer'].apply(clean_customer_name)
 
-# Fuzzy match customer names
+# Fuzzy match
 def fuzzy_match_customer(job_name, choices, threshold=85):
     match, score, _ = process.extractOne(job_name, choices)
     return match if score >= threshold else None
-
 jobs_df['Matched Customer'] = jobs_df['Cleaned Customer'].apply(
     lambda x: fuzzy_match_customer(x, mileage_df['Cleaned Customer'].unique())
 )
 
-# ✅ Log matched vs unmatched customers
+# Log matched customers
 st.subheader("📋 Matched Customers")
 st.dataframe(jobs_df[['Job number', 'Customer Company', 'Matched Customer']])
 
-# Infer number of evaluators needed
+# Evaluators needed
 jobs_df['Evaluators Needed'] = jobs_df['Assignee(s)'].apply(
     lambda x: len(str(x).split(',')) if pd.notnull(x) else 1
 )
@@ -98,10 +87,12 @@ job_slots = []
 for _, row in jobs_df.iterrows():
     job_slots += [(row['Job number'], row['Matched Customer'])] * row['Evaluators Needed']
 
-# ✅ Log job slot count
-st.write(f"🧮 Total job slots created: {len(job_slots)}")
+# Log job slot count
+expected_slots = jobs_df['Evaluators Needed'].sum()
+actual_slots = len(job_slots)
+st.write(f"🧮 Expected job slots: {expected_slots}, Actual job slots: {actual_slots}")
 
-# Build cost matrix with Springborn exclusion
+# Build cost matrix
 cost_matrix = {}
 for evaluator in mileage_df['Evaluator'].unique():
     for job_num, customer in job_slots:
@@ -111,28 +102,21 @@ for evaluator in mileage_df['Evaluator'].unique():
         if not match.empty:
             cost_matrix[(evaluator, job_num)] = match['Total Cost'].values[0]
 
-# ✅ Log cost matrix coverage
-job_coverage = pd.DataFrame(job_slots, columns=['Job number', 'Customer'])
-job_coverage['Has Cost Entry'] = job_coverage.apply(
-    lambda row: any((e, row['Job number']) in cost_matrix for e in mileage_df['Evaluator'].unique()),
-    axis=1
-)
-missing_costs = job_coverage[~job_coverage['Has Cost Entry']]
-if not missing_costs.empty:
-    st.warning(f"⚠️ Jobs with no cost data: {missing_costs['Job number'].unique().tolist()}")
+# Log cost matrix coverage
+covered_jobs = set([job_num for (_, job_num) in cost_matrix.keys()])
+all_jobs = set([job_num for job_num, _ in job_slots])
+missing_jobs = sorted(all_jobs - covered_jobs)
+if missing_jobs:
+    st.warning(f"⚠️ Jobs missing from cost matrix: {missing_jobs}")
 
-# Define optimization problem
+# Optimization
 prob = LpProblem("EvaluatorAssignment", LpMinimize)
 x = LpVariable.dicts("assign", cost_matrix.keys(), cat=LpBinary)
-
-# Objective: minimize total cost
 prob += lpSum([cost_matrix[key] * x[key] for key in cost_matrix])
 
-# Constraint: each job slot filled once
+# Constraints
 for job_num, customer in job_slots:
     prob += lpSum([x[(evaluator, job_num)] for evaluator in mileage_df['Evaluator'].unique() if (evaluator, job_num) in x]) == 1
-
-# Constraint: each evaluator used once
 for evaluator in mileage_df['Evaluator'].unique():
     prob += lpSum([x[(evaluator, job_num)] for job_num, _ in job_slots if (evaluator, job_num) in x]) <= 1
 
@@ -158,12 +142,9 @@ for (evaluator, job_num), var in x.items():
         })
 
 final_df = pd.DataFrame(assignments).sort_values(by=['Job number', 'Round-Trip Miles'])
-
-# Display results
 st.subheader("Optimized Evaluator Assignments")
 st.dataframe(final_df, use_container_width=True)
 
-# Download button
 csv = final_df.to_csv(index=False).encode('utf-8')
 st.download_button(
     label="Download Assignment Table as CSV",
