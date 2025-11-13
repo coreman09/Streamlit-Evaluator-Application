@@ -66,13 +66,26 @@ def clean_customer_name(name):
 jobs_df['Cleaned Customer'] = jobs_df['Customer Company'].apply(clean_customer_name)
 mileage_df['Cleaned Customer'] = mileage_df['Customer'].apply(clean_customer_name)
 
-# Fuzzy match
-def fuzzy_match_customer(job_name, choices, threshold=85):
+# Manual override for known fuzzy match errors
+manual_map = {
+    "precision pipeline solutions": "precision pipeline solutions"
+}
+
+# Fuzzy match with override
+def fuzzy_match_customer(job_name, choices, threshold=90):
+    if job_name in manual_map:
+        return manual_map[job_name]
     match, score, _ = process.extractOne(job_name, choices)
     return match if score >= threshold else None
+
 jobs_df['Matched Customer'] = jobs_df['Cleaned Customer'].apply(
     lambda x: fuzzy_match_customer(x, mileage_df['Cleaned Customer'].unique())
 )
+
+# Priority sorting
+priority_customers = ["national fuel"]
+jobs_df['Priority'] = jobs_df['Matched Customer'].apply(lambda x: 1 if x in priority_customers else 0)
+jobs_df = jobs_df.sort_values(by='Priority', ascending=False)
 
 # Log matched customers
 st.subheader("📋 Matched Customers")
@@ -93,7 +106,7 @@ expected_slots = jobs_df['Evaluators Needed'].sum()
 actual_slots = len(job_slots)
 st.write(f"🧮 Expected job slots: {expected_slots}, Actual job slots: {actual_slots}")
 
-# Build cost matrix
+# Build cost matrix with best match selection
 cost_matrix = {}
 for evaluator in mileage_df['Evaluator'].unique():
     for job_num, customer in job_slots:
@@ -101,7 +114,8 @@ for evaluator in mileage_df['Evaluator'].unique():
             continue
         match = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Cleaned Customer'] == customer)]
         if not match.empty:
-            cost_matrix[(evaluator, job_num)] = match['Total Cost'].values[0]
+            best_row = match.sort_values(by='Total Cost', ascending=False).iloc[0]
+            cost_matrix[(evaluator, job_num)] = best_row['Total Cost']
 
 # Log cost matrix coverage
 covered_jobs = set([job_num for (_, job_num) in cost_matrix.keys()])
@@ -115,12 +129,12 @@ prob = LpProblem("EvaluatorAssignment", LpMinimize)
 x = LpVariable.dicts("assign", cost_matrix.keys(), cat=LpBinary)
 prob += lpSum([cost_matrix[key] * x[key] for key in cost_matrix])
 
-# ✅ Corrected constraint for multi-evaluator jobs
+# Multi-evaluator constraint
 slot_counts = Counter([job_num for job_num, _ in job_slots])
 for job_num, count in slot_counts.items():
     prob += lpSum([x[(evaluator, job_num)] for evaluator in mileage_df['Evaluator'].unique() if (evaluator, job_num) in x]) == count
 
-# ✅ Strict one-time use of evaluators
+# Strict one-time use
 for evaluator in mileage_df['Evaluator'].unique():
     prob += lpSum([x[(evaluator, job_num)] for job_num, _ in job_slots if (evaluator, job_num) in x]) <= 1
 
@@ -133,7 +147,7 @@ assignments = []
 for (evaluator, job_num), var in x.items():
     if var.value() == 1:
         job_row = jobs_df[jobs_df['Job number'] == job_num].iloc[0]
-        cost_row = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Cleaned Customer'] == job_row['Matched Customer'])].iloc[0]
+        cost_row = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Cleaned Customer'] == job_row['Matched Customer'])].sort_values(by='Total Cost', ascending=False).iloc[0]
         assignments.append({
             'Job number': job_num,
             'Customer Company': job_row['Customer Company'],
