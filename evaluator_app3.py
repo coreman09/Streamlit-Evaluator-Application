@@ -63,6 +63,9 @@ filtered_df['Total Cost'] = (
     filtered_df['Mileage Bonus']
 )
 
+# Remove index before display
+filtered_df = filtered_df.reset_index(drop=True)
+
 # Highlight closest evaluator per customer
 def highlight_grouped_rows(df_grouped):
     highlight = pd.DataFrame('', index=df_grouped.index, columns=df_grouped.columns)
