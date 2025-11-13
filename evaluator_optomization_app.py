@@ -92,6 +92,8 @@ for _, row in jobs_df.iterrows():
 cost_matrix = {}
 for evaluator in mileage_df['Evaluator'].unique():
     for job_num, customer in job_slots:
+        if evaluator == "Springborn" and customer == "national fuel":
+            continue
         match = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Customer'] == customer)]
         if not match.empty:
             cost_matrix[(evaluator, job_num)] = match['Total Cost'].values[0]
@@ -145,4 +147,5 @@ st.download_button(
     data=csv,
     file_name="optimized_evaluator_assignments.csv",
     mime="text/csv"
+
 )
