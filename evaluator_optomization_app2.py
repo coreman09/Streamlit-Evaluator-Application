@@ -118,6 +118,7 @@ prob.solve()
 
 # Build output
 assignments = []
+assigned_jobs = set()
 for (evaluator, job_num), var in x.items():
     if var.value() == 1:
         job_row = jobs_df[jobs_df['Job number'] == job_num].iloc[0]
@@ -133,10 +134,16 @@ for (evaluator, job_num), var in x.items():
             'Total Cost': round(cost_row['Total Cost'], 2),
             'Status': cost_row['Status']
         })
+        assigned_jobs.add(job_num)
 
-final_df = pd.DataFrame(assignments).sort_values(by=['Job number', 'Round-Trip Miles'])
+# Identify unassigned jobs
+all_jobs = set([job_num for job_num, _ in job_slots])
+missing_jobs = sorted(all_jobs - assigned_jobs)
+if missing_jobs:
+    st.warning(f"⚠️ Unassigned jobs due to constraints or evaluator limits: {missing_jobs}")
 
 # Display results
+final_df = pd.DataFrame(assignments).sort_values(by=['Job number', 'Round-Trip Miles'])
 st.subheader("Optimized Evaluator Assignments")
 st.dataframe(final_df, use_container_width=True)
 
