@@ -60,22 +60,28 @@ mileage_df['Total Cost'] = mileage_df['cost ($)'].fillna(0) + mileage_df['Per Di
 # Load job file
 jobs_df = pd.read_excel(uploaded_job_file)
 
-# Clean customer names
+# Enhanced customer name cleaning
 def clean_customer_name(name):
-    return re.sub(r'^\d+\s*[-–]?\s*', '', str(name)).lower().strip()
+    name = re.sub(r'^\d+\s*[-–]?\s*', '', str(name))  # remove numeric prefix
+    name = re.sub(r'\(.*?\)', '', name)               # remove parentheticals
+    name = re.sub(r'[^a-zA-Z0-9\s]', '', name)        # remove punctuation
+    return name.lower().strip()
+
 jobs_df['Cleaned Customer'] = jobs_df['Customer Company'].apply(clean_customer_name)
 mileage_df['Cleaned Customer'] = mileage_df['Customer'].apply(clean_customer_name)
 
-# Manual override for known fuzzy match errors
+# Manual override map
 manual_map = {
-    "precision pipeline solutions": "precision pipeline solutions"
+    "precision pipeline solutions": "precision pipeline solutions",
+    "j mullen sons inc": "j mullen & sons"
 }
 
 # Fuzzy match with override
 def fuzzy_match_customer(job_name, choices, threshold=90):
-    if job_name in manual_map:
-        return manual_map[job_name]
-    match, score, _ = process.extractOne(job_name, choices)
+    cleaned = job_name.lower().strip()
+    if cleaned in manual_map:
+        return manual_map[cleaned]
+    match, score, _ = process.extractOne(cleaned, choices)
     return match if score >= threshold else None
 
 jobs_df['Matched Customer'] = jobs_df['Cleaned Customer'].apply(
@@ -99,14 +105,15 @@ jobs_df['Evaluators Needed'] = jobs_df['Assignee(s)'].apply(
 # Create job slots
 job_slots = []
 for _, row in jobs_df.iterrows():
-    job_slots += [(row['Job number'], row['Matched Customer'])] * row['Evaluators Needed']
+    if pd.notnull(row['Matched Customer']):
+        job_slots += [(row['Job number'], row['Matched Customer'])] * row['Evaluators Needed']
 
 # Log job slot count
 expected_slots = jobs_df['Evaluators Needed'].sum()
 actual_slots = len(job_slots)
 st.write(f"🧮 Expected job slots: {expected_slots}, Actual job slots: {actual_slots}")
 
-# Build cost matrix with best match selection
+# Build cost matrix
 cost_matrix = {}
 for evaluator in mileage_df['Evaluator'].unique():
     for job_num, customer in job_slots:
@@ -117,7 +124,7 @@ for evaluator in mileage_df['Evaluator'].unique():
             best_row = match.sort_values(by='Total Cost', ascending=False).iloc[0]
             cost_matrix[(evaluator, job_num)] = best_row['Total Cost']
 
-# Log cost matrix coverage
+# Log missing jobs
 covered_jobs = set([job_num for (_, job_num) in cost_matrix.keys()])
 all_jobs = set([job_num for job_num, _ in job_slots])
 missing_jobs = sorted(all_jobs - covered_jobs)
