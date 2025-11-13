@@ -69,19 +69,14 @@ jobs_df = pd.read_excel(uploaded_job_file)
 jobs_df['Customer Company'] = jobs_df['Customer Company'].astype(str).str.strip().str.lower()
 mileage_df['Customer'] = mileage_df['Customer'].astype(str).str.strip().str.lower()
 
-# Fuzzy match customer names (lower threshold)
-def fuzzy_match_customer(job_name, choices, threshold=75):
+# Fuzzy match customer names
+def fuzzy_match_customer(job_name, choices, threshold=85):
     match, score, _ = process.extractOne(job_name, choices)
     return match if score >= threshold else None
 
 jobs_df['Matched Customer'] = jobs_df['Customer Company'].apply(
     lambda x: fuzzy_match_customer(x, mileage_df['Customer'].unique())
 )
-
-# Warn about unmatched customers
-unmatched_jobs = jobs_df[jobs_df['Matched Customer'].isnull()]
-if not unmatched_jobs.empty:
-    st.warning(f"⚠️ Unmatched customers: {unmatched_jobs['Customer Company'].unique().tolist()}")
 
 # Infer number of evaluators needed
 jobs_df['Evaluators Needed'] = jobs_df['Assignee(s)'].apply(
@@ -91,10 +86,9 @@ jobs_df['Evaluators Needed'] = jobs_df['Assignee(s)'].apply(
 # Create job slots
 job_slots = []
 for _, row in jobs_df.iterrows():
-    if pd.notnull(row['Matched Customer']):
-        job_slots += [(row['Job number'], row['Matched Customer'])] * row['Evaluators Needed']
+    job_slots += [(row['Job number'], row['Matched Customer'])] * row['Evaluators Needed']
 
-# Build cost matrix
+# Build cost matrix with Springborn exclusion
 cost_matrix = {}
 for evaluator in mileage_df['Evaluator'].unique():
     for job_num, customer in job_slots:
@@ -103,13 +97,6 @@ for evaluator in mileage_df['Evaluator'].unique():
         match = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Customer'] == customer)]
         if not match.empty:
             cost_matrix[(evaluator, job_num)] = match['Total Cost'].values[0]
-
-# Warn about jobs with no cost data
-valid_jobs = set([job_num for (_, job_num) in cost_matrix.keys()])
-all_jobs = set([job_num for job_num, _ in job_slots])
-missing_cost_jobs = sorted(all_jobs - valid_jobs)
-if missing_cost_jobs:
-    st.warning(f"⚠️ Jobs with no cost data: {missing_cost_jobs}")
 
 # Define optimization problem
 prob = LpProblem("EvaluatorAssignment", LpMinimize)
@@ -131,7 +118,6 @@ prob.solve()
 
 # Build output
 assignments = []
-assigned_jobs = set()
 for (evaluator, job_num), var in x.items():
     if var.value() == 1:
         job_row = jobs_df[jobs_df['Job number'] == job_num].iloc[0]
@@ -147,15 +133,10 @@ for (evaluator, job_num), var in x.items():
             'Total Cost': round(cost_row['Total Cost'], 2),
             'Status': cost_row['Status']
         })
-        assigned_jobs.add(job_num)
 
-# Warn about unassigned jobs
-missing_jobs = sorted(all_jobs - assigned_jobs)
-if missing_jobs:
-    st.warning(f"⚠️ Unassigned jobs due to constraints or evaluator limits: {missing_jobs}")
+final_df = pd.DataFrame(assignments).sort_values(by=['Job number', 'Round-Trip Miles'])
 
 # Display results
-final_df = pd.DataFrame(assignments).sort_values(by=['Job number', 'Round-Trip Miles'])
 st.subheader("Optimized Evaluator Assignments")
 st.dataframe(final_df, use_container_width=True)
 
