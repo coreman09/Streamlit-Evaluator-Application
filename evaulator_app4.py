@@ -45,17 +45,18 @@ if selected_evaluators:
 
 # Ensure numeric columns
 filtered_df['Round-Trip Miles'] = pd.to_numeric(filtered_df.get('Round-Trip Miles'), errors='coerce')
+filtered_df['Drive Time (min)'] = pd.to_numeric(filtered_df.get('Drive Time (min)'), errors='coerce')
 filtered_df['cost ($)'] = pd.to_numeric(filtered_df.get('cost ($)'), errors='coerce')
 
 # Add Per Diem (only for contractors)
 filtered_df['Per Diem'] = filtered_df.apply(
-    lambda row: 225 if row['Round-Trip Miles'] > 175 and row['Status'] != 'Full-Time' else 0,
+    lambda row: 225 if row['Round-Trip Miles'] > 175 and row['Status'] == 'Contract' else 0,
     axis=1
 )
 
 # Add Mileage Bonus (only for contractors)
 def mileage_bonus(row):
-    if row['Status'] == 'Full-Time' or pd.isnull(row['Round-Trip Miles']):
+    if row['Status'] != 'Contract' or pd.isnull(row['Round-Trip Miles']):
         return 0
     elif row['Round-Trip Miles'] > 800:
         return 500
@@ -73,26 +74,33 @@ filtered_df['Total Cost'] = (
     filtered_df['Mileage Bonus']
 )
 
+# Format numeric columns
+format_dict = {
+    'Round-Trip Miles': '{:.2f}',
+    'Drive Time (min)': '{:.2f}',
+    'cost ($)': '${:,.2f}',
+    'Per Diem': '${:,.2f}',
+    'Mileage Bonus': '${:,.2f}',
+    'Total Cost': '${:,.2f}'
+}
+for col, fmt in format_dict.items():
+    if col in filtered_df.columns:
+        filtered_df[col] = filtered_df[col].apply(lambda x: fmt.format(x) if pd.notnull(x) else "")
+
 # Highlight closest evaluator per customer
 def highlight_grouped_rows(df_grouped):
     highlight = pd.DataFrame('', index=df_grouped.index, columns=df_grouped.columns)
     for customer, group in df_grouped.groupby('Customer'):
         if not group.empty and 'Round-Trip Miles' in group.columns:
-            min_index = group['Round-Trip Miles'].idxmin()
+            min_index = group['Round-Trip Miles'].astype(float).idxmin()
             highlight.loc[min_index] = ['background-color: lightgreen'] * len(group.columns)
     return highlight
-
-# Format currency columns
-for col in ['cost ($)', 'Per Diem', 'Mileage Bonus', 'Total Cost']:
-    if col in filtered_df.columns:
-        filtered_df[col] = filtered_df[col].apply(lambda x: f"${x:,.2f}" if pd.notnull(x) else "")
 
 # Remove index before styling
 filtered_df = filtered_df.reset_index(drop=True)
 
 # Apply styling
-styled_df = filtered_df.style\
-    .apply(highlight_grouped_rows, axis=None)
+styled_df = filtered_df.style.apply(highlight_grouped_rows, axis=None)
 
 # Display results
 st.subheader("Closest Evaluator per Customer")
