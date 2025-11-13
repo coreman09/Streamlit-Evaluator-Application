@@ -1,9 +1,17 @@
 import streamlit as st
 import pandas as pd
 
-# Load and clean main data
+# Load main data
 df = pd.read_csv("Evaluator_Customer_Mileage.csv")
 df.columns = df.columns.str.strip()
+
+# Normalize cost column
+if "Cost ($)" in df.columns:
+    df.rename(columns={"Cost ($)": "cost ($)"}, inplace=True)
+
+# Drop one-way miles if present
+if "One-Way Miles" in df.columns:
+    df.drop(columns=["One-Way Miles"], inplace=True)
 
 # Load full-time evaluator list
 full_time_df = pd.read_csv("Evaluators_FullTime.csv")
@@ -13,10 +21,6 @@ full_time_names = full_time_df['Last Name'].str.strip().unique()
 df['Status'] = df['Evaluator'].apply(
     lambda name: 'Full-Time' if name.strip() in full_time_names else 'Contract'
 )
-
-# Drop one-way miles if present
-if "One-Way Miles" in df.columns:
-    df.drop(columns=["One-Way Miles"], inplace=True)
 
 # Sidebar filters
 st.sidebar.header("Filter Options")
@@ -43,13 +47,13 @@ if selected_evaluators:
 filtered_df['Round-Trip Miles'] = pd.to_numeric(filtered_df.get('Round-Trip Miles'), errors='coerce')
 filtered_df['cost ($)'] = pd.to_numeric(filtered_df.get('cost ($)'), errors='coerce')
 
-# Add Per Diem
+# Add Per Diem (only for contractors)
 filtered_df['Per Diem'] = filtered_df.apply(
     lambda row: 225 if row['Round-Trip Miles'] > 175 and row['Status'] != 'Full-Time' else 0,
     axis=1
 )
 
-# Add Mileage Bonus
+# Add Mileage Bonus (only for contractors)
 def mileage_bonus(row):
     if row['Status'] == 'Full-Time' or pd.isnull(row['Round-Trip Miles']):
         return 0
@@ -69,16 +73,32 @@ filtered_df['Total Cost'] = (
     filtered_df['Mileage Bonus']
 )
 
+# Highlight closest evaluator per customer
+def highlight_grouped_rows(df_grouped):
+    highlight = pd.DataFrame('', index=df_grouped.index, columns=df_grouped.columns)
+    for customer, group in df_grouped.groupby('Customer'):
+        if not group.empty and 'Round-Trip Miles' in group.columns:
+            min_index = group['Round-Trip Miles'].idxmin()
+            highlight.loc[min_index] = ['background-color: lightgreen'] * len(group.columns)
+    return highlight
+
 # Format currency columns
 for col in ['cost ($)', 'Per Diem', 'Mileage Bonus', 'Total Cost']:
     if col in filtered_df.columns:
         filtered_df[col] = filtered_df[col].apply(lambda x: f"${x:,.2f}" if pd.notnull(x) else "")
 
-# Display results with no index
-st.subheader("Closest Evaluator per Customer")
-st.data_editor(filtered_df, use_container_width=True, disabled=True)
+# Remove index before styling
+filtered_df = filtered_df.reset_index(drop=True)
 
-# Download button (no index column)
+# Apply styling
+styled_df = filtered_df.style\
+    .apply(highlight_grouped_rows, axis=None)
+
+# Display results
+st.subheader("Closest Evaluator per Customer")
+st.dataframe(styled_df, use_container_width=True)
+
+# Download button
 csv = filtered_df.to_csv(index=False).encode('utf-8')
 st.download_button(
     label="Download Filtered Data as CSV",
