@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import re
 from rapidfuzz import process
 from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpBinary
 
@@ -66,16 +67,21 @@ mileage_df['Total Cost'] = (
 
 # Load uploaded job file
 jobs_df = pd.read_excel(uploaded_job_file)
-jobs_df['Customer Company'] = jobs_df['Customer Company'].astype(str).str.strip().str.lower()
-mileage_df['Customer'] = mileage_df['Customer'].astype(str).str.strip().str.lower()
+
+# Clean customer names by stripping numeric prefixes
+def clean_customer_name(name):
+    return re.sub(r'^\d+\s*[-–]?\s*', '', str(name)).lower().strip()
+
+jobs_df['Cleaned Customer'] = jobs_df['Customer Company'].apply(clean_customer_name)
+mileage_df['Cleaned Customer'] = mileage_df['Customer'].apply(clean_customer_name)
 
 # Fuzzy match customer names
 def fuzzy_match_customer(job_name, choices, threshold=85):
     match, score, _ = process.extractOne(job_name, choices)
     return match if score >= threshold else None
 
-jobs_df['Matched Customer'] = jobs_df['Customer Company'].apply(
-    lambda x: fuzzy_match_customer(x, mileage_df['Customer'].unique())
+jobs_df['Matched Customer'] = jobs_df['Cleaned Customer'].apply(
+    lambda x: fuzzy_match_customer(x, mileage_df['Cleaned Customer'].unique())
 )
 
 # Infer number of evaluators needed
@@ -94,7 +100,7 @@ for evaluator in mileage_df['Evaluator'].unique():
     for job_num, customer in job_slots:
         if evaluator == "Springborn" and customer == "national fuel":
             continue  # Exclude Springborn from National Fuel
-        match = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Customer'] == customer)]
+        match = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Cleaned Customer'] == customer)]
         if not match.empty:
             cost_matrix[(evaluator, job_num)] = match['Total Cost'].values[0]
 
@@ -121,10 +127,10 @@ assignments = []
 for (evaluator, job_num), var in x.items():
     if var.value() == 1:
         job_row = jobs_df[jobs_df['Job number'] == job_num].iloc[0]
-        cost_row = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Customer'] == job_row['Matched Customer'])].iloc[0]
+        cost_row = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Cleaned Customer'] == job_row['Matched Customer'])].iloc[0]
         assignments.append({
             'Job number': job_num,
-            'Customer Company': job_row['Customer Company'].title(),
+            'Customer Company': job_row['Customer Company'],
             'Evaluator': evaluator,
             'Round-Trip Miles': round(cost_row['Round-Trip Miles'], 2),
             'cost ($)': round(cost_row['cost ($)'], 2),
