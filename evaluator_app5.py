@@ -1,4 +1,19 @@
+import streamlit as st
 import pandas as pd
+import os
+
+st.set_page_config(page_title="Evaluator Assignment Tool", layout="wide")
+st.title("Evaluator Assignment by Closest Distance")
+
+# File checks
+missing_files = []
+for file in ["Jobs_1526.xlsx", "Evaluator_Customer_Mileage.csv", "Evaluators_FullTime.csv"]:
+    if not os.path.exists(file):
+        missing_files.append(file)
+
+if missing_files:
+    st.error(f"Missing required file(s): {', '.join(missing_files)}. Please upload them to proceed.")
+    st.stop()
 
 # Load mileage data
 mileage_df = pd.read_csv("Evaluator_Customer_Mileage.csv")
@@ -44,9 +59,9 @@ mileage_df['Total Cost'] = (
     mileage_df['Mileage Bonus']
 )
 
-# Load job data from updated file
+# Load job data
 jobs_df = pd.read_excel("Jobs_1526.xlsx")
-jobs_df['Customer Company'] = jobs_df['Customer Company'].str.strip()
+jobs_df['Customer Company'] = jobs_df['Customer Company'].astype(str).str.strip()
 
 # Infer number of evaluators needed
 jobs_df['Evaluators Needed'] = jobs_df['Assignee(s)'].apply(
@@ -76,6 +91,15 @@ output_cols = [
 
 final_df = ranked_df[output_cols].sort_values(by=['Job number', 'Round-Trip Miles'])
 
-# Display or export
-print(final_df)
-# final_df.to_csv("job_assignments.csv", index=False)
+# Display results
+st.subheader("Closest Evaluators Assigned to Each Job")
+st.dataframe(final_df, use_container_width=True)
+
+# Download button
+csv = final_df.to_csv(index=False).encode('utf-8')
+st.download_button(
+    label="Download Assignment Table as CSV",
+    data=csv,
+    file_name="evaluator_assignments.csv",
+    mime="text/csv"
+)
