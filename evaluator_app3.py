@@ -63,7 +63,7 @@ filtered_df['Total Cost'] = (
     filtered_df['Mileage Bonus']
 )
 
-# Remove index before display
+# Remove index before display and export
 filtered_df = filtered_df.reset_index(drop=True)
 
 # Highlight closest evaluator per customer
@@ -88,7 +88,7 @@ styled_df = filtered_df.style\
 
 # Display results
 st.subheader("Closest Evaluator per Customer")
-st.dataframe(styled_df)
+st.dataframe(styled_df, use_container_width=True)
 
 # Download button (no index column)
 csv = filtered_df.to_csv(index=False).encode('utf-8')
