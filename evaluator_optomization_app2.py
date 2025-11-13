@@ -120,7 +120,7 @@ slot_counts = Counter([job_num for job_num, _ in job_slots])
 for job_num, count in slot_counts.items():
     prob += lpSum([x[(evaluator, job_num)] for evaluator in mileage_df['Evaluator'].unique() if (evaluator, job_num) in x]) == count
 
-# Evaluator usage constraint
+# ✅ Strict one-time use of evaluators
 for evaluator in mileage_df['Evaluator'].unique():
     prob += lpSum([x[(evaluator, job_num)] for job_num, _ in job_slots if (evaluator, job_num) in x]) <= 1
 
