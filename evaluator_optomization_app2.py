@@ -4,6 +4,7 @@ import os
 import re
 from rapidfuzz import process
 from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpBinary, LpStatus
+from collections import Counter
 
 st.set_page_config(page_title="Evaluator Optimizer", layout="wide")
 st.title("Optimized Evaluator Assignment")
@@ -114,9 +115,12 @@ prob = LpProblem("EvaluatorAssignment", LpMinimize)
 x = LpVariable.dicts("assign", cost_matrix.keys(), cat=LpBinary)
 prob += lpSum([cost_matrix[key] * x[key] for key in cost_matrix])
 
-# Constraints
-for job_num, customer in job_slots:
-    prob += lpSum([x[(evaluator, job_num)] for evaluator in mileage_df['Evaluator'].unique() if (evaluator, job_num) in x]) == 1
+# ✅ Corrected constraint for multi-evaluator jobs
+slot_counts = Counter([job_num for job_num, _ in job_slots])
+for job_num, count in slot_counts.items():
+    prob += lpSum([x[(evaluator, job_num)] for evaluator in mileage_df['Evaluator'].unique() if (evaluator, job_num) in x]) == count
+
+# Evaluator usage constraint
 for evaluator in mileage_df['Evaluator'].unique():
     prob += lpSum([x[(evaluator, job_num)] for job_num, _ in job_slots if (evaluator, job_num) in x]) <= 1
 
