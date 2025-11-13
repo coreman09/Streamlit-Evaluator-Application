@@ -76,7 +76,7 @@ jobs_df['Cleaned Customer'] = jobs_df['Customer Company'].apply(clean_customer_n
 mileage_df['Cleaned Customer'] = mileage_df['Customer'].apply(clean_customer_name)
 
 # Fuzzy match customer names
-def fuzzy_match_customer(job_name, choices, threshold=85):
+def fuzzy_match_customer(job_name, choices, threshold=75):
     match, score, _ = process.extractOne(job_name, choices)
     return match if score >= threshold else None
 
@@ -153,4 +153,5 @@ st.download_button(
     data=csv,
     file_name="optimized_evaluator_assignments.csv",
     mime="text/csv"
+
 )
