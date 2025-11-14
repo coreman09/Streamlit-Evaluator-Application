@@ -88,13 +88,19 @@ job_slots = []
 for _, row in jobs_df.iterrows():
     job_slots += [(row['Job number'], row['Matched Customer'])] * row['Evaluators Needed']
 
-# Build cost matrix
+# Define last-resort managers and penalty
+last_resort_managers = ["Sherman", "Gray", "Macdonald"]
+manager_penalty = 10000
+
+# Build cost matrix with penalty
 cost_matrix = {}
 for evaluator in mileage_df['Evaluator'].unique():
     for job_num, customer in job_slots:
         match = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Customer'] == customer)]
         if not match.empty:
-            cost_matrix[(evaluator, job_num)] = match['Total Cost'].values[0]
+            base_cost = match['Total Cost'].values[0]
+            adjusted_cost = base_cost + (manager_penalty if evaluator in last_resort_managers else 0)
+            cost_matrix[(evaluator, job_num)] = adjusted_cost
 
 # Define optimization problem
 prob = LpProblem("EvaluatorAssignment", LpMinimize)
@@ -113,9 +119,6 @@ for evaluator in mileage_df['Evaluator'].unique():
 
 # Solve
 prob.solve()
-
-# Define last-resort managers
-last_resort_managers = ["Sherman", "Gray", "Macdonald"]
 
 # Build output
 assignments = []
