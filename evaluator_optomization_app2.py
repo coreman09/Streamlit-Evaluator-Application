@@ -157,6 +157,9 @@ for evaluator in mileage_df['Evaluator'].unique():
 prob.solve()
 st.write(f"🧠 Solver status: {LpStatus[prob.status]}")
 
+# Assignment tier logic
+last_resort_managers = ["Sherman", "Gray", "Macdonald"]
+
 # Build output
 assignments = []
 for (evaluator, job_num), var in x.items():
@@ -166,6 +169,7 @@ for (evaluator, job_num), var in x.items():
             (mileage_df['Evaluator'] == evaluator) &
             (mileage_df['Cleaned Customer'].str.lower().str.strip() == job_row['Matched Customer'].lower().strip())
         ].sort_values(by='Total Cost', ascending=False).iloc[0]
+        assignment_tier = "Last Resort Manager" if evaluator in last_resort_managers else "Primary"
         assignments.append({
             'Job number': job_num,
             'Customer Company': job_row['Customer Company'],
@@ -175,7 +179,8 @@ for (evaluator, job_num), var in x.items():
             'Per Diem': cost_row['Per Diem'],
             'Mileage Bonus': cost_row['Mileage Bonus'],
             'Total Cost': round(cost_row['Total Cost'], 2),
-            'Status': cost_row['Status']
+            'Status': cost_row['Status'],
+            'Assignment Tier': assignment_tier
         })
 
 final_df = pd.DataFrame(assignments).sort_values(by=['Job number', 'Round-Trip Miles'])
