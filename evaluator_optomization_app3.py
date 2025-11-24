@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import os
@@ -121,9 +120,10 @@ for evaluator in mileage_df['Evaluator'].unique():
 # Solve
 prob.solve()
 
-# --- NEW: Manual Selection Mode ---
+# --- NEW: Manual Selection Mode with One-Time Use ---
 st.subheader("Manual Selection: Top 5 Closest Evaluators")
 selected_assignments = {}
+used_evaluators = set()
 
 def get_top_evaluators(job_customer, mileage_df, top_n=5):
     matches = mileage_df[mileage_df['Customer'] == job_customer]
@@ -132,20 +132,28 @@ def get_top_evaluators(job_customer, mileage_df, top_n=5):
 for _, job_row in jobs_df.iterrows():
     job_num = job_row['Job number']
     customer = job_row['Matched Customer']
-    if pd.isnull(customer): 
+    if pd.isnull(customer):
         continue
+    
     top_eval_df = get_top_evaluators(customer, mileage_df)
+    
+    # Filter out already used evaluators
+    available_evals = [e for e in top_eval_df['Evaluator'].tolist() if e not in used_evaluators]
+    if not available_evals:
+        st.warning(f"No available evaluators left for Job {job_num}")
+        continue
     
     st.write(f"### Job {job_num} - {job_row['Customer Company'].title()}")
     st.dataframe(top_eval_df)
     
     chosen_eval = st.selectbox(
         f"Select evaluator for Job {job_num}",
-        options=top_eval_df['Evaluator'].tolist(),
+        options=available_evals,
         key=f"job_{job_num}"
     )
     
     selected_assignments[job_num] = chosen_eval
+    used_evaluators.add(chosen_eval)  # enforce one-time use
 
 # Build output from manual selections
 assignments = []
@@ -179,5 +187,4 @@ st.download_button(
     data=csv,
     file_name="optimized_evaluator_assignments.csv",
     mime="text/csv"
-
 )
