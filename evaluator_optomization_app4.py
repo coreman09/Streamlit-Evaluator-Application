@@ -99,7 +99,7 @@ for _, row in jobs_df.iterrows():
     job_slots += [(row['Job number'], row['Matched Customer'])] * row['Evaluators Needed']
 
 # Define last-resort managers and penalty
-last_resort_managers = ["Sherman", "Gray", "Macdonald"]
+last_resort_managers = ["Sherman", "Gray", "MacDonald"]
 manager_penalty = 10000
 
 # Build cost matrix with penalty
@@ -202,4 +202,5 @@ st.dataframe(final_df, use_container_width=True)
 # Grand total
 grand_total = final_df['Total Cost'].sum()
 st.markdown(f"### Grand Total Cost: ${grand_total:,.2f}")
+
 
