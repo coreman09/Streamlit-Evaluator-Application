@@ -189,6 +189,10 @@ final_df = pd.DataFrame(assignments).sort_values(by=['Job number'])
 st.subheader("Final Assignments (Manual Selection)")
 st.dataframe(final_df, use_container_width=True)
 
+# Grand total
+grand_total = final_df['Total Cost'].sum()
+st.markdown(f"### Grand Total Cost: ${grand_total:,.2f}")
+
 # Download button
 csv = final_df.to_csv(index=False).encode('utf-8')
 st.download_button(
