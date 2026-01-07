@@ -201,4 +201,5 @@ st.dataframe(final_df, use_container_width=True)
 
 # Grand total
 grand_total = final_df['Total Cost'].sum()
-st.markdown(f
+st.markdown(f"### Grand Total Cost: ${grand_total:,.2f}")
+
