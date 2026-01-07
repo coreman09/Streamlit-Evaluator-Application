@@ -128,9 +128,13 @@ for job_num in set(j[0] for j in job_slots):
 # Solve
 prob.solve()
 
-# --- Manual Selection Mode (all evaluators available) ---
-st.subheader("Manual Selection: All Evaluators")
+# --- Manual Selection Mode (chart shows top 5, dropdown allows all) ---
+st.subheader("Manual Selection: Chart Top 5, Choose Any Evaluator")
 selected_assignments = {}
+
+def get_top_evaluators(job_customer, mileage_df, top_n=5):
+    matches = mileage_df[mileage_df['Customer'] == job_customer]
+    return matches.nsmallest(top_n, 'Total Cost')[['Evaluator','Round-Trip Miles','2026 Cost','Total Cost']]
 
 for _, job_row in jobs_df.iterrows():
     job_num = job_row['Job number']
@@ -138,14 +142,18 @@ for _, job_row in jobs_df.iterrows():
     if pd.isnull(customer):
         continue
     
-    matches = mileage_df[mileage_df['Customer'] == customer][['Evaluator','Round-Trip Miles','2026 Cost','Total Cost']]
-    
+    # Show top 5 evaluators in chart
+    top_eval_df = get_top_evaluators(customer, mileage_df)
     st.write(f"### Job {job_num} - {job_row['Customer Company'].title()}")
-    st.dataframe(matches)
+    st.dataframe(top_eval_df)
+    
+    # Dropdown allows ALL evaluators for this customer
+    all_matches = mileage_df[mileage_df['Customer'] == customer]
+    available_evals = all_matches['Evaluator'].tolist()
     
     chosen_eval = st.selectbox(
         f"Select evaluator for Job {job_num}",
-        options=matches['Evaluator'].tolist(),
+        options=available_evals,
         key=f"job_{job_num}"
     )
     
