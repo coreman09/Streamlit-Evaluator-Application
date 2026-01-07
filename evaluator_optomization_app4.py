@@ -196,4 +196,5 @@ st.download_button(
     label="Download Assignment Table as CSV",
     data=csv,
     file_name="optimized_evaluator_assignments.csv",
-    mime="text/c
+
+    mime="text/csv"
