@@ -123,14 +123,17 @@ prob += lpSum([cost_matrix[key] * x[key] for key in cost_matrix])
 for job_num in set(j[0] for j in job_slots):
     prob += lpSum([x[(evaluator, job_num)] for evaluator in mileage_df['Evaluator'].unique() if (evaluator, job_num) in x]) == job_slots.count((job_num, jobs_df[jobs_df['Job number'] == job_num]['Matched Customer'].iloc[0]))
 
-# Evaluators can be reused, so no <=1 restriction
+# Evaluators cannot be reused (one-time use)
+for evaluator in mileage_df['Evaluator'].unique():
+    prob += lpSum([x[(evaluator, job_num)] for job_num, customer in job_slots if (evaluator, job_num) in x]) <= 1
 
 # Solve
 prob.solve()
 
-# --- Manual Selection Mode (chart shows top 5, dropdown allows all, default closest) ---
-st.subheader("Manual Selection: Chart Top 5, Choose Any Evaluator")
+# --- Manual Selection Mode (chart shows top 5, dropdown allows all, default closest, one-time use enforced) ---
+st.subheader("Manual Selection: Chart Top 5, Choose Any Evaluator (One-Time Use)")
 selected_assignments = {}
+used_evaluators = set()
 
 def get_top_evaluators(job_customer, mileage_df, top_n=5):
     matches = mileage_df[mileage_df['Customer'] == job_customer]
@@ -151,18 +154,25 @@ for _, job_row in jobs_df.iterrows():
     all_matches = mileage_df[mileage_df['Customer'] == customer]
     available_evals = all_matches['Evaluator'].tolist()
     
-    # Default to closest evaluator (lowest Total Cost)
-    closest_eval = all_matches.nsmallest(1, 'Total Cost')['Evaluator'].iloc[0]
-    default_index = available_evals.index(closest_eval) if closest_eval in available_evals else 0
+    # Filter out already-used evaluators
+    selectable_evals = [e for e in available_evals if e not in used_evaluators]
+    if not selectable_evals:
+        # fallback: still show all, but mark reused ones
+        selectable_evals = available_evals
+    
+    # Default to closest among selectable
+    closest_eval = all_matches[all_matches['Evaluator'].isin(selectable_evals)].nsmallest(1, 'Total Cost')['Evaluator'].iloc[0]
+    default_index = selectable_evals.index(closest_eval) if closest_eval in selectable_evals else 0
     
     chosen_eval = st.selectbox(
         f"Select evaluator for Job {job_num}",
-        options=available_evals,
+        options=selectable_evals,
         index=default_index,
         key=f"job_{job_num}"
     )
     
     selected_assignments[job_num] = chosen_eval
+    used_evaluators.add(chosen_eval)
 
 # Build output from manual selections
 assignments = []
@@ -185,19 +195,10 @@ for job_num, evaluator in selected_assignments.items():
 
 final_df = pd.DataFrame(assignments).sort_values(by=['Job number'])
 
-# Display results
-st.subheader("Final Assignments (Manual Selection)")
+# Display detailed results
+st.subheader("Final Assignments (Detailed)")
 st.dataframe(final_df, use_container_width=True)
 
 # Grand total
 grand_total = final_df['Total Cost'].sum()
-st.markdown(f"### Grand Total Cost: ${grand_total:,.2f}")
-
-# Download button
-csv = final_df.to_csv(index=False).encode('utf-8')
-st.download_button(
-    label="Download Assignment Table as CSV",
-    data=csv,
-    file_name="optimized_evaluator_assignments.csv",
-    mime="text/csv"
-)
+st.markdown(f
