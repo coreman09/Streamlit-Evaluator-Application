@@ -35,7 +35,7 @@ mileage_df['Status'] = mileage_df['Evaluator'].apply(
 
 # Ensure numeric columns
 mileage_df['Round-Trip Miles'] = pd.to_numeric(mileage_df['Round-Trip Miles'], errors='coerce')
-mileage_df['cost ($)'] = pd.to_numeric(mileage_df['cost ($)'], errors='coerce')
+mileage_df['2026 Cost'] = pd.to_numeric(mileage_df['cost ($)'], errors='coerce')
 
 # Add Per Diem (contractors only)
 mileage_df['Per Diem'] = mileage_df.apply(
@@ -116,4 +116,5 @@ st.download_button(
     data=csv,
     file_name="evaluator_assignments.csv",
     mime="text/csv"
+
 )
