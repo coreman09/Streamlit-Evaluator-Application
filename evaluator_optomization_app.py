@@ -59,7 +59,7 @@ mileage_df['Mileage Bonus'] = mileage_df.apply(mileage_bonus, axis=1)
 
 # Add Total Cost
 mileage_df['Total Cost'] = (
-    mileage_df['cost ($)'].fillna(0) +
+    mileage_df['2026 Cost'].fillna(0) +
     mileage_df['Per Diem'] +
     mileage_df['Mileage Bonus']
 )
@@ -147,5 +147,6 @@ st.download_button(
     mime="text/csv"
 
 )
+
 
 
