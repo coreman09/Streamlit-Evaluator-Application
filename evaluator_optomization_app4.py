@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 from difflib import get_close_matches   # built-in fuzzy matching
-from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpBinary, LpStatus
+from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpBinary
 
 st.set_page_config(page_title="Evaluator Optimizer", layout="wide")
 st.title("Optimized Evaluator Assignment")
@@ -123,17 +123,14 @@ prob += lpSum([cost_matrix[key] * x[key] for key in cost_matrix])
 for job_num in set(j[0] for j in job_slots):
     prob += lpSum([x[(evaluator, job_num)] for evaluator in mileage_df['Evaluator'].unique() if (evaluator, job_num) in x]) == job_slots.count((job_num, jobs_df[jobs_df['Job number'] == job_num]['Matched Customer'].iloc[0]))
 
-# Constraint: each evaluator used once
-for evaluator in mileage_df['Evaluator'].unique():
-    prob += lpSum([x[(evaluator, job_num)] for job_num in set(j[0] for j in job_slots) if (evaluator, job_num) in x]) <= 1
+# Constraint: evaluators can be reused, so no <=1 restriction
 
 # Solve
 prob.solve()
 
-# --- Manual Selection Mode with One-Time Use ---
+# --- Manual Selection Mode (evaluators reusable) ---
 st.subheader("Manual Selection: Top 5 Closest Evaluators")
 selected_assignments = {}
-used_evaluators = set()
 
 def get_top_evaluators(job_customer, mileage_df, top_n=5):
     matches = mileage_df[mileage_df['Customer'] == job_customer]
@@ -146,12 +143,7 @@ for _, job_row in jobs_df.iterrows():
         continue
     
     top_eval_df = get_top_evaluators(customer, mileage_df)
-    
-    # Filter out already used evaluators
-    available_evals = [e for e in top_eval_df['Evaluator'].tolist() if e not in used_evaluators]
-    if not available_evals:
-        st.warning(f"No available evaluators left for Job {job_num}")
-        continue
+    available_evals = top_eval_df['Evaluator'].tolist()
     
     st.write(f"### Job {job_num} - {job_row['Customer Company'].title()}")
     st.dataframe(top_eval_df)
@@ -163,7 +155,6 @@ for _, job_row in jobs_df.iterrows():
     )
     
     selected_assignments[job_num] = chosen_eval
-    used_evaluators.add(chosen_eval)  # enforce one-time use
 
 # Build output from manual selections
 assignments = []
@@ -198,4 +189,3 @@ st.download_button(
     file_name="optimized_evaluator_assignments.csv",
     mime="text/csv"
 )
-
