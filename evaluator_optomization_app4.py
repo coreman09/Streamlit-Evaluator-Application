@@ -128,7 +128,7 @@ for job_num in set(j[0] for j in job_slots):
 # Solve
 prob.solve()
 
-# --- Manual Selection Mode (chart shows top 5, dropdown allows all) ---
+# --- Manual Selection Mode (chart shows top 5, dropdown allows all, default closest) ---
 st.subheader("Manual Selection: Chart Top 5, Choose Any Evaluator")
 selected_assignments = {}
 
@@ -151,9 +151,14 @@ for _, job_row in jobs_df.iterrows():
     all_matches = mileage_df[mileage_df['Customer'] == customer]
     available_evals = all_matches['Evaluator'].tolist()
     
+    # Default to closest evaluator (lowest Total Cost)
+    closest_eval = all_matches.nsmallest(1, 'Total Cost')['Evaluator'].iloc[0]
+    default_index = available_evals.index(closest_eval) if closest_eval in available_evals else 0
+    
     chosen_eval = st.selectbox(
         f"Select evaluator for Job {job_num}",
         options=available_evals,
+        index=default_index,
         key=f"job_{job_num}"
     )
     
