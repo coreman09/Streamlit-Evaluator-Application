@@ -162,42 +162,43 @@ for _, job_row in jobs_df.iterrows():
         key=f"job_{job_num}"
     )
     
-    selected_assignments[job_num] = chosen_eval
+    # Store multiple evaluators if job needs more than one
+    if job_row['Evaluators Needed'] > 1:
+        if job_num not in selected_assignments:
+            selected_assignments[job_num] = []
+        selected_assignments[job_num].append(chosen_eval)
+    else:
+        selected_assignments[job_num] = [chosen_eval]
 
 # Build output from manual selections
 assignments = []
-for job_num, evaluator in selected_assignments.items():
+for job_num, evaluators in selected_assignments.items():
     job_row = jobs_df[jobs_df['Job number'] == job_num].iloc[0]
-    cost_row = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Customer'] == job_row['Matched Customer'])].iloc[0]
-    assignment_tier = "Last Resort Manager" if evaluator in last_resort_managers else "Primary"
-    assignments.append({
-        'Job number': job_num,
-        'Customer Company': job_row['Customer Company'].title(),
-        'Evaluator': evaluator,
-        'Round-Trip Miles': round(cost_row['Round-Trip Miles'], 2),
-        '2026 Cost': round(cost_row['2026 Cost'], 2),
-        'Per Diem': cost_row['Per Diem'],
-        'Mileage Bonus': cost_row['Mileage Bonus'],
-        'Total Cost': round(cost_row['Total Cost'], 2),
-        'Status': cost_row['Status'],
-        'Assignment Tier': assignment_tier
-    })
+    for evaluator in evaluators:
+        cost_row = mileage_df[(mileage_df['Evaluator'] == evaluator) & (mileage_df['Customer'] == job_row['Matched Customer'])].iloc[0]
+        assignment_tier = "Last Resort Manager" if evaluator in last_resort_managers else "Primary"
+        assignments.append({
+            'Job number': job_num,
+            'Customer Company': job_row['Customer Company'].title(),
+            'Evaluator': evaluator,
+            'Round-Trip Miles': round(cost_row['Round-Trip Miles'], 2),
+            '2026 Cost': round(cost_row['2026 Cost'], 2),
+            'Per Diem': cost_row['Per Diem'],
+            'Mileage Bonus': cost_row['Mileage Bonus'],
+            'Total Cost': round(cost_row['Total Cost'], 2),
+            'Status': cost_row['Status'],
+            'Assignment Tier': assignment_tier
+        })
 
 final_df = pd.DataFrame(assignments).sort_values(by=['Job number'])
 
-# Display results
-st.subheader("Final Assignments (Manual Selection)")
+# Display detailed results
+st.subheader("Final Assignments (Detailed)")
 st.dataframe(final_df, use_container_width=True)
 
 # Grand total
 grand_total = final_df['Total Cost'].sum()
 st.markdown(f"### Grand Total Cost: ${grand_total:,.2f}")
 
-# Download button
-csv = final_df.to_csv(index=False).encode('utf-8')
-st.download_button(
-    label="Download Assignment Table as CSV",
-    data=csv,
-    file_name="optimized_evaluator_assignments.csv",
-    mime="text/csv"
-)
+# Grouped summary per job
+grouped = final
