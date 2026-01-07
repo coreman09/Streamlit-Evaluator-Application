@@ -125,7 +125,7 @@ for (evaluator, job_num), var in x.items():
             'Customer Company': job_row['Customer Company'].title(),
             'Evaluator': evaluator,
             'Round-Trip Miles': round(cost_row['Round-Trip Miles'], 2),
-            'cost ($)': round(cost_row['cost ($)'], 2),
+            '2026 Cost': round(cost_row['cost ($)'], 2),
             'Per Diem': cost_row['Per Diem'],
             'Mileage Bonus': cost_row['Mileage Bonus'],
             'Total Cost': round(cost_row['Total Cost'], 2),
@@ -147,6 +147,7 @@ st.download_button(
     mime="text/csv"
 
 )
+
 
 
 
